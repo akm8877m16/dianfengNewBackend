@@ -100,6 +100,8 @@ def getHourHistory():
         print result_first
         if result_first is not None:
             consume = result_latest['electricity'] - result_first['electricity'] #本小时耗电量
+            if consume > 1000 or consume < 0:
+                consume = 0
             result = db.get_collection('data_hour', codec_options=options).find({'device_sn': sn, 'dayTime':dayTime}).limit(1)
             result2 = db.get_collection('data_month', codec_options=options).find({'device_sn': sn, 'year':monthTime}).limit(1)
             print('matched:  ' + str(result.count()))
@@ -187,9 +189,9 @@ def getHourHistory():
                     monthRecord['month_history']['peak'][month-1]['value'] = consume
                     monthRecord['consumePeak'] = consume
 
-                    intset_result = dataHistoryMonth.insert_one(monthRecord)
-                    print (intset_result.inserted_id)
-    #dataAllCollection.delete_many({'postTime': {"$lte": endtime}})
+                intset_result = dataHistoryMonth.insert_one(monthRecord)
+                print (intset_result.inserted_id)
+    dataAllCollection.delete_many({'postTime': {"$lte": endtime}})
 
 
 

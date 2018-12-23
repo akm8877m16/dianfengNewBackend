@@ -16,6 +16,7 @@ from restServer.apiHandler.base import BaseHandler
 from sqlORM.sqlORM import CronTask,OnceTask
 from utils.ajax import JsonResponse,JsonError
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy import and_
 import logging
 from apscheduler.schedulers.tornado import TornadoScheduler
 logging.basicConfig()
@@ -51,7 +52,7 @@ class getTasksHandler(BaseHandler):
         Session = sessionmaker(bind=self.engine)
         session = Session()
         oncetasks = []
-        query = session.query(OnceTask).filter(OnceTask.device_sn == sn).all()
+        query = session.query(OnceTask).filter(and_(OnceTask.device_sn == sn,OnceTask.device_sn != 3)).all()
         for tasks in query:
             task = {
                 'id': tasks.id,
@@ -67,7 +68,7 @@ class getTasksHandler(BaseHandler):
             oncetasks.append(task)
 
         crontasks = []
-        query = session.query(CronTask).filter(CronTask.device_sn == sn).all()
+        query = session.query(CronTask).filter(and_(CronTask.device_sn == sn,CronTask.status != 3)).all()
         for tasks in query:
             task = {
                 'id': tasks.id,
@@ -254,9 +255,8 @@ class removeJobHandler(BaseHandler):
             task = session.query(CronTask).filter(CronTask.job == job).first()
         print task
         if task is not None:
-            session.delete(task)
+            task.status = 3
             session.commit()
-        session.close()
         return 'success'
 
     @asynchronous
@@ -335,7 +335,7 @@ class resumeOnceTaskHandler(BaseHandler):
             task = session.query(CronTask).filter(CronTask.job == job).first()
         print task
         if task is not None:
-            session.delete(task)
+            task.status = 3
             session.commit()
         session.close()
         return 'success'

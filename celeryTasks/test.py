@@ -15,9 +15,9 @@ hexTrans = lambda x: int(x, 16)
 #data_day = db.data_day  # 电能集合
 
 #redisPool = redis.ConnectionPool(host='localhost', port=6379, decode_responses=True)
-#options = DEFAULT_CODEC_OPTIONS.with_options(tz_aware=True)
+options = DEFAULT_CODEC_OPTIONS.with_options(tz_aware=True)
 
-
+'''
 def messageHandler(message):
     results = message.split(",")
     zigbee_sn = results[0][2:]
@@ -55,168 +55,73 @@ def messageHandler(message):
         dataAllCollection = db["data_all"]
         result = dataAllCollection.insert_one(post)
         print(result.inserted_id)
-
+'''
 '''
 1 通过data_all计算之前一个小时的耗电总量
 2 然后把data_all里前一个小时的数据都删掉
 3 同时，document构建基于时间桶的设计
 '''
+'''
+deleteTime 异常数据出现的那一天
+sn 设备sn 
+简单一点，异常出现的那一天的数据全部清空，相应的，把月记录里峰值谷值累计减掉
+'''
+def  removeAbnormalValueInHistory(sn, deleteTime):
+    dayTime = datetime.datetime(deleteTime.year, deleteTime.month, deleteTime.day)
+    monthTime = datetime.datetime(deleteTime.year, 1, 1)
 
-def getHourHistory():
-    queryTime = datetime.datetime.now()
-    starttime = datetime.datetime(queryTime.year, queryTime.month, queryTime.day, queryTime.hour)
-    endtime = datetime.datetime(queryTime.year, queryTime.month, queryTime.day, queryTime.hour, 59, 59)
-    dayTime = datetime.datetime(queryTime.year, queryTime.month, queryTime.day)
-    hour = queryTime.hour
-
-    queryTime_test = datetime.datetime.now() - datetime.timedelta(hours=17)
-    hour_test = queryTime_test.hour
-
-    print queryTime_test
-    print hour_test
-    print starttime
-    print endtime
-    print dayTime
-    print hour
-    client = MongoClient('localhost', 27017)
-    db = client["dianfeng"]  # database name: dianfeng
-    dataAllCollection = db["data_all"]
-    dataHistoryHour = db["data_hour"]
-    sns = dataAllCollection.distinct('device_sn')
-    for sn in sns:
-        result_latest = db.get_collection('data_all', codec_options=options).find_one(
-            {'device_sn': sn, 'postTime': {"$lte": endtime, "$gte": starttime}},
-            sort=[('postTime', -1)])
-        print result_latest
-        result_first = db.get_collection('data_all', codec_options=options).find_one(
-            {'device_sn': sn, 'postTime': {"$lte": endtime, "$gte": starttime}},
-            sort=[('postTime', 1)])
-        print result_first
-        if result_first is not None:
-            consume = result_latest['electricity'] - result_first['electricity'] #本小时耗电量
-            result = db.get_collection('data_hour', codec_options=options).find({'device_sn': sn, 'dayTime':dayTime}).limit(1)
-            print('matched:  ' + str(result.count()))
-            if result.count() == 1:
-                print(sn + " " + dayTime.__str__() + " "+ 'exist')
-                #document exist, update
-                insert_result = dataHistoryHour.update_one({'device_sn': sn, 'dayTime': dayTime},{'$inc': {'consume': consume} })
-                print("consume update:  " + str(insert_result.matched_count))
-                if hour_test < ELECTRIC_TIME['Shanghai']['LOW'] or hour_test >= ELECTRIC_TIME['Shanghai']['HIGH']:
-                    path = 'hour_history.valley'
-                    print path
-                    insert_result = dataHistoryHour.update_one({'device_sn': sn, 'dayTime': dayTime},
-                                                               {'$addToSet': {path: {str(hour_test): consume}},
-                                                                '$inc': {'consumeValley': consume}})
-                else:
-                    path = 'hour_history.peak'
-                    print path
-                    insert_result = dataHistoryHour.update_one({'device_sn': sn, 'dayTime': dayTime},
-                                                               {'$addToSet': {path: {str(hour_test): consume}},
-                                                                '$inc': {'consumePeak': consume}})
-                print("hour record of the day update:  " + str(insert_result.matched_count))
-            else:
-                print(sn + " " + dayTime.__str__() + " " + 'not exist')
-                # document not exist, create new
-                dayRecord = {}
-                dayRecord['device_sn'] = sn
-                dayRecord['zigbee_sn'] = result_latest['zigbee_sn']
-                dayRecord['location'] = 'Shanghai'
-                dayRecord['dayTime'] = dayTime
-                dayRecord['consume'] = consume
-                dayRecord['hour_history'] = {}
-                dayRecord['hour_history']['valley'] = []
-                dayRecord['hour_history']['peak'] = []
-                dayRecord['consumePeak'] = 0
-                dayRecord['consumeValley'] = 0
-                if hour_test < ELECTRIC_TIME['Shanghai']['LOW'] or hour_test >= ELECTRIC_TIME['Shanghai']['HIGH']:
-                    dayRecord['hour_history']['valley'].append({str(hour_test): consume})
-                    dayRecord['consumeValley'] = consume
-                else:
-                    dayRecord['hour_history']['peak'].append({str(hour_test): consume})
-                    dayRecord['consumePeak'] = consume
-                    intset_result = dataHistoryHour.insert_one(dayRecord)
-                    print (intset_result.inserted_id)
-
-def getHourHistory2():
-    queryTime = datetime.datetime.now()
-    queryTime_test = datetime.datetime.now() - datetime.timedelta(hours=5)
-    starttime = datetime.datetime(queryTime.year, queryTime.month, queryTime.day, queryTime.hour)
-    endtime = datetime.datetime(queryTime.year, queryTime.month, queryTime.day, queryTime.hour, 59, 59)
-    dayTime = datetime.datetime(queryTime.year, queryTime.month, queryTime.day)
-    monthTime = datetime.datetime(queryTime.year, 1, 1)
-    hour = queryTime_test.hour
-    month = queryTime.month
-    print starttime
-    print endtime
     print dayTime
     print monthTime
-    print hour
-    print month
+    month = deleteTime.month
+
     client = MongoClient('localhost', 27017)
     db = client["dianfeng"]  # database name: dianfeng
-    dataAllCollection = db["data_all"]
     dataHistoryHour = db["data_hour"]
     dataHistoryMonth = db["data_month"]
-    sns = dataAllCollection.distinct('device_sn')
-    for sn in sns:
-        result_latest = db.get_collection('data_all', codec_options=options).find_one(
-            {'device_sn': sn, 'postTime': {"$lte": endtime, "$gte": starttime}},
-            sort=[('postTime', -1)])
-        print result_latest
-        result_first = db.get_collection('data_all', codec_options=options).find_one(
-            {'device_sn': sn, 'postTime': {"$lte": endtime, "$gte": starttime}},
-            sort=[('postTime', 1)])
-        print result_first
-        if result_first is not None:
-            consume = result_latest['electricity'] - result_first['electricity']  # 本小时耗电量
-            result = db.get_collection('data_hour', codec_options=options).find(
-                {'device_sn': sn, 'dayTime': dayTime}).limit(1)
-            result2 = db.get_collection('data_month', codec_options=options).find(
-                {'device_sn': sn, 'year': monthTime}).limit(1)
-            print('matched:  ' + str(result.count()))
-            print('matched:  ' + str(result2.count()))
-            # update/create hour history
-            if result.count() == 1:
-                print(sn + " " + dayTime.__str__() + " " + 'exist')
+
+    result = db.get_collection('data_hour', codec_options=options).find_one(
+                {'device_sn': sn, 'dayTime': dayTime})
+    result2 = db.get_collection('data_month', codec_options=options).find_one(
+                {'device_sn': sn, 'year': monthTime})
+    print('matched:  ' + str(result))
+    print('matched:  ' + str(result2))
+    # update/create hour history
+    if result is not None:
+            print(sn + " " + dayTime.__str__() + " " + 'exist')
+            # document exist, update
+            print ("error peak value: " + str(result["consumePeak"]))
+            print ("error valley value: " + str(result["consumeValley"]))
+            deleteValuePeak = result["consumePeak"]
+            deleteValueValley = result["consumeValley"]
+            # update/create month history
+            if result2 is not None:
+                print(sn + " " + monthTime.__str__() + " " + 'exist')
                 # document exist, update
-                insert_result = dataHistoryHour.update_one({'device_sn': sn, 'dayTime': dayTime},
-                                                           {'$inc': {'consume': consume}})
-                print("consume update:  " + str(insert_result.matched_count))
-                if hour < ELECTRIC_TIME['Shanghai']['LOW'] or hour >= ELECTRIC_TIME['Shanghai']['HIGH']:
-                    path = 'hour_history.valley'
-                    print path
-                    insert_result = dataHistoryHour.update_one({'device_sn': sn, 'dayTime': dayTime},
-                                                               {'$addToSet': {path: {str(hour): consume}},
-                                                                '$inc': {'consumeValley': consume}})
-                else:
-                    path = 'hour_history.peak'
-                    print path
-                    insert_result = dataHistoryHour.update_one({'device_sn': sn, 'dayTime': dayTime},
-                                                               {'$addToSet': {path: {str(hour): consume}},
-                                                                '$inc': {'consumePeak': consume}})
-                print("hour record of the day update:  " + str(insert_result.matched_count))
-            else:
-                print(sn + " " + dayTime.__str__() + " " + 'not exist')
-                # document not exist, create new
-                dayRecord = {}
-                dayRecord['device_sn'] = sn
-                dayRecord['zigbee_sn'] = result_latest['zigbee_sn']
-                dayRecord['location'] = 'Shanghai'
-                dayRecord['dayTime'] = dayTime
-                dayRecord['consume'] = consume
-                dayRecord['hour_history'] = {}
-                dayRecord['hour_history']['valley'] = []
-                dayRecord['hour_history']['peak'] = []
-                dayRecord['consumePeak'] = 0
-                dayRecord['consumeValley'] = 0
-                if hour < ELECTRIC_TIME['Shanghai']['LOW'] or hour >= ELECTRIC_TIME['Shanghai']['HIGH']:
-                    dayRecord['hour_history']['valley'].append({str(hour): consume})
-                    dayRecord['consumeValley'] = consume
-                else:
-                    dayRecord['hour_history']['peak'].append({str(hour): consume})
-                    dayRecord['consumePeak'] = consume
-                intset_result = dataHistoryHour.insert_one(dayRecord)
-                print (intset_result.inserted_id)
+                updateConsume = result2["consume"] - deleteValuePeak - deleteValueValley
+                updateValuePeak = result2["consumePeak"] - deleteValuePeak
+                updateValueValley = result2["consumeValley"] - deleteValueValley
+                updateValuePeakMonth = result2["month_history"]["peak"][month-1]["value"] - deleteValuePeak
+                updateValueValleyMonth =result2["month_history"]["valley"][month-1]["value"] - deleteValueValley
+
+                print(str(result2["month_history"]["valley"][month-1]["value"]))
+                print("updateConsume: " + str(updateConsume))
+                print("updateValuePeak: " + str(updateValuePeak))
+                print("updateValueValley: " + str(updateValueValley))
+                print("updateValuePeakMonth: " + str(updateValuePeakMonth))
+                print("updateValueValleyMonth: " + str(updateValueValleyMonth))
+
+                dataHistoryMonth.update_one({'device_sn': sn, 'year': monthTime},
+                                                            {'$set': {'consume': updateConsume,'consumePeak':updateValuePeak, 'consumeValley':updateValueValley},
+                                                            })
+                path1 = 'month_history.valley.month'
+                dataHistoryMonth.update_one({'device_sn': sn, 'year': monthTime, path1: month},
+                                        {'$set': {"month_history.valley.$.value": updateValueValleyMonth}})
+                path2 = 'month_history.peak.month'
+                dataHistoryMonth.update_one({'device_sn': sn, 'year': monthTime, path2: month},
+                                        {'$set': {"month_history.peak.$.value": updateValuePeakMonth}})
+
+                print(sn + " day and month update complete")
+            dataHistoryHour.delete_one({'device_sn': sn, 'dayTime': dayTime})
 
 #test Singleton
 class Singleton:
@@ -277,7 +182,7 @@ if __name__ == '__main__':
     t3 = Test.getSingleton()
     t3.test()
     assert (isinstance(t3, Test))
-    '''
+    
     taskMsg = "12 23 12 23 12 12"
     payload = taskMsg.split(' ')
     ack = bytearray()
@@ -289,3 +194,13 @@ if __name__ == '__main__':
     taskInfo['time'] = int(time.time())
     taskInfo['delay'] = 15
     repeatMessageHandler.delay(taskInfo)
+    '''
+    sn = "cdf1f40e"
+    deleteTime = datetime.datetime(2018, 4, 10)
+
+    client = MongoClient('localhost', 27017)
+    db = client["dianfeng"]  # database name: dianfeng
+    dataHistoryHour = db["data_hour"]
+    sns = dataHistoryHour.distinct('device_sn')
+    for sn in sns:
+        removeAbnormalValueInHistory(sn, deleteTime)
