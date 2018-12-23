@@ -1,1 +1,3 @@
 #dianfengNewBackend
+2018/12/23
+针对定时任务的为题，实现上改为apscheduler 独立部署service,通过rpc方式与接口service通信，根本上解决之前定时的问题
